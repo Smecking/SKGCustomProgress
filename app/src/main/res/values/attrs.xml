@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="CustomProgress">
+        <attr name="unreach_color" format="color|reference"/>
+        <attr name="reach_color" format="color|reference"/>
+        <attr name="unreach_height" format="dimension"/>
+        <attr name="reach_height" format="dimension"/>
+        <attr name="text_color" format="color|reference"/>
+        <attr name="text_size" format="dimension"/>
+        <attr name="text_offset" format="dimension"/>
+    </declare-styleable>
+</resources>
