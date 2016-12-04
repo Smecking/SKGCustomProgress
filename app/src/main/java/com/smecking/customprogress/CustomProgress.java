@@ -3,131 +3,247 @@ package com.smecking.customprogress;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.util.AttributeSet;
-import android.util.TypedValue;
-import android.widget.ProgressBar;
+import android.view.View;
 
 /**
  * Created by Smecking on 2016/12/1.
  */
 
-public class CustomProgress extends ProgressBar {
+public class CustomProgress extends View {
 
-    private static final int DEFLUT_TEXT_SIZE = 10;
-    private static final int DEFLUT_TEXT_COLOR = 0xDDFF6633;
-    private static final int DEFLUT_UNREACH_COLOR = 0xDDCC6666;
-    private static final int DEFLUT_REACH_COLOR = 0xDDCC6633;
-    private static final int DEFLUT_UNREACH_HEIGHT = 2;
-    private static final int DEFLUT_REACH_HEIGHT = 2;
-    private static final int DEFLUT_TEXT_OFFSET = 10;
+    /**
+     * 文字颜色
+     */
+private int textColor;
+    /**
+     * 文字大小
+     */
+    private float textSize;
+    /**
+     * reached部分颜色
+     */
+    private int reachedColor;
 
+    /**
+     * reached部分的高度
+     * */
+    private float reachedHeight;
+    /**
+     * unReached部分的颜色
+     * */
+    private int unReachedColor;
+    /**
+     * unReached部分的高度
+     * */
+    private float unReachedHeight;
+    /**
+     * 当前进度
+     * */
+    private int currentProgress;
+    /**
+     * 总进度
+     * */
+    private int maxProgress;
 
-    private int mTextsize = sp2px(DEFLUT_TEXT_SIZE);
-    private int mTextColor = DEFLUT_TEXT_COLOR;
-    private int mUnreachColor = DEFLUT_UNREACH_COLOR;
-    private int mReachColor = DEFLUT_REACH_COLOR;
-    private int mUnreachHeight = dp2px(DEFLUT_UNREACH_HEIGHT);
-    private int mReachHeight = dp2px(DEFLUT_REACH_HEIGHT);
-    private int mTextOffset = dp2px(DEFLUT_TEXT_OFFSET);
+    /**
+     * reach of rect
+     * */
+    private RectF reachedRectF = new RectF(0,0,0,0);
 
-    private Paint mPaint = new Paint();
-    //控件的宽度减去padding值
-    private int mRealWidth;
+    /**
+     * unReach of rect
+     * */
+    private RectF unReachedRectF = new RectF(0,0,0,0);
+
+    private Paint textPaint;
+
+    private Paint reachedPaint;
+
+    private Paint unReachedPaint;
+    private String currentDrawText;
+
+    private boolean dawUnreachedBar = true;
+
+    private boolean drawReachedBar = true;
+    private float drawTextStart,drawTextEnd;
 
     public CustomProgress(Context context) {
-        this(context, null);
+        this(context,null);
     }
 
     public CustomProgress(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        //获取自定义属性
-        getStyledAttr(context,attrs);
+        this(context, attrs,0);
     }
 
-    private void getStyledAttr(Context context,AttributeSet attrs) {
-        TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.CustomProgress);
+    public CustomProgress(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        TypedArray a = context.obtainStyledAttributes(attrs,R.styleable.CustomProgress);
+        textColor  = a.getColor(R.styleable.CustomProgress_textColor, Color.parseColor("#3498DB"));
+        textSize = sp2px(context, a.getDimension(R.styleable.CustomProgress_textSize, 14f));
+        reachedHeight = dip2px(context, a.getDimension(R.styleable.CustomProgress_reachedHeight, 1.25f));
+        reachedColor = a.getColor(R.styleable.CustomProgress_reachedColor, Color.parseColor("#3498DB"));
+        unReachedHeight = dip2px(context, a.getDimension(R.styleable.CustomProgress_unReachedHeight, 0.75f));
+        unReachedColor = a.getColor(R.styleable.CustomProgress_unReachedColor, Color.parseColor("#CCCCCC"));
 
-        mTextsize = (int) typedArray.getDimension(R.styleable.CustomProgress_text_size, mTextsize);
-        mTextColor = typedArray.getColor(R.styleable.CustomProgress_text_color, mTextColor);
-        mUnreachColor = typedArray.getColor(R.styleable.CustomProgress_unreach_color, mUnreachColor);
-        mUnreachHeight = (int) typedArray.getDimension(R.styleable.CustomProgress_unreach_height, mUnreachHeight);
-        mReachColor = typedArray.getColor(R.styleable.CustomProgress_reach_color, mReachColor);
-        mReachHeight = (int) typedArray.getDimension(R.styleable.CustomProgress_reach_height, mReachHeight);
-        mTextOffset = (int) typedArray.getDimension(R.styleable.CustomProgress_text_offset, mTextOffset);
-        typedArray.recycle();
+        currentProgress = a.getInt(R.styleable.CustomProgress_currentProgress, 0);
+        maxProgress = a.getInt(R.styleable.CustomProgress_maxProgress, 100);
 
-        mPaint.setTextSize(mTextsize);
+        reachedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        reachedPaint.setColor(reachedColor);
+
+        unReachedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        unReachedPaint.setColor(unReachedColor);
+
+        textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(textColor);
+        textPaint.setTextSize(textSize);
+
+        a.recycle();
+
     }
 
     @Override
-    protected synchronized void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        //int widthMode = MeasureSpec.getMode(widthMeasureSpec);
-        int widthVal = MeasureSpec.getSize(widthMeasureSpec);
-
-        int height = measureHeight(heightMeasureSpec);
-
-        setMeasuredDimension(widthVal, height);
-        mRealWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight();
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        /**
+         * 一个MeasureSpec由大小和模式组成。
+         * 它有三种模式：
+         * UNSPECIFIED(未指定),父元素不对子元素施加任何束缚，子元素可以得到任意想要的大小；
+         * EXACTLY(完全)，父元素决定子元素的确切大小，子元素将被限定在给定的边界里而忽略它本身大小；
+         * AT_MOST(至多)，子元素至多达到指定大小的值。
+         * */
+        setMeasuredDimension(measureWidth(widthMeasureSpec),measureHeight(heightMeasureSpec));
     }
 
     private int measureHeight(int heightMeasureSpec) {
-        int result = 0;
+        int result;
         int mode = MeasureSpec.getMode(heightMeasureSpec);
         int size = MeasureSpec.getSize(heightMeasureSpec);
-        if (mode == MeasureSpec.EXACTLY) {
+        int padding = getPaddingTop()+getPaddingBottom();
+        if (mode == MeasureSpec.EXACTLY){
             result = size;
-        } else {
-            int textHeight = (int) (mPaint.descent() - mPaint.ascent());
-            result = getPaddingBottom() + getPaddingTop() + Math.max(Math.max(mReachHeight, mUnreachHeight), Math.abs(textHeight));
+        }else{
+            result = getSuggestedMinimumHeight();
+            result += padding;
+            if (mode == MeasureSpec.AT_MOST){
+                result = Math.min(result, size);
+            }
         }
-        if (mode == MeasureSpec.AT_MOST) {
-            result = Math.min(result, size);
+        return result;
+    }
+
+    private int measureWidth(int widthMeasureSpec) {
+        int result;
+        int mode = MeasureSpec.getMode(widthMeasureSpec);
+        int size = MeasureSpec.getSize(widthMeasureSpec);
+        int padding = getPaddingLeft()+getPaddingRight();
+        if (mode == MeasureSpec.EXACTLY){
+            result = size;
+        }else{
+            result = getSuggestedMinimumWidth();
+            result += padding;
+            if (mode == MeasureSpec.AT_MOST){
+                result = Math.max(result, size);
+            }
         }
         return result;
     }
 
     @Override
-    protected synchronized void onDraw(Canvas canvas) {
-        canvas.save();
-        canvas.translate(getPaddingLeft(), getHeight() / 2);
-        boolean noNeedUnreach = false;
-        float radio = getProgress() * 1.0f / getMax();
-        String text = getProgress() + "%";
-        int textWidth = (int) mPaint.measureText(text);
-        float progressX = radio * mRealWidth;
-        if (progressX + textWidth > mRealWidth) {
-            progressX = mRealWidth - textWidth;
-            noNeedUnreach = true;
-        }
-        float endX = progressX - mTextOffset / 2;
-        if (endX > 0) {
-            mPaint.setColor(mReachColor);
-            mPaint.setStrokeWidth(mReachHeight);
-            canvas.drawLine(0, 0, endX, 0, mPaint);
-        }
-        //绘制字体
-        mPaint.setColor(mTextColor);
-        int y = (int) (-(mPaint.descent() + mPaint.ascent()) / 2);
-        canvas.drawText(text, progressX, y, mPaint);
-
-        //绘制unreach
-        if (!noNeedUnreach) {
-            float start = progressX + mTextOffset / 2 + textWidth;
-            mPaint.setColor(mUnreachColor);
-            mPaint.setStrokeWidth(mUnreachHeight);
-            canvas.drawLine(start, 0, mRealWidth, 0, mPaint);
-        }
-
-        canvas.restore();
+    protected int getSuggestedMinimumWidth() {
+        return (int) textSize;
     }
 
-    private int dp2px(int dpVal) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, getResources().getDisplayMetrics());
+    @Override
+    protected int getSuggestedMinimumHeight() {
+        return Math.max((int) textSize, Math.max((int) reachedHeight, (int) unReachedHeight));
     }
 
-    private int sp2px(int spVal) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, spVal, getResources().getDisplayMetrics());
+    @Override
+    protected void onDraw(Canvas canvas) {
+        calculateDrawRectF();
+        if (drawReachedBar) {
+            canvas.drawRect(reachedRectF, reachedPaint);
+        }
+
+        canvas.drawText(currentDrawText, drawTextStart, drawTextEnd, textPaint);
+
+        if (dawUnreachedBar) {
+            canvas.drawRect(unReachedRectF, unReachedPaint);
+        }
+    }
+
+    private void calculateDrawRectF() {
+        currentDrawText = String.format("%d", currentProgress * 100 / maxProgress);
+        currentDrawText = currentDrawText+"%";
+        float drawTextWidth = textPaint.measureText(currentDrawText);
+
+        if (currentProgress == 0){
+            drawReachedBar = false;
+            drawTextStart = getPaddingLeft();
+            reachedRectF.right = 0;
+        }else{
+            drawReachedBar = true;
+            reachedRectF.left = getPaddingLeft();
+            reachedRectF.top = getHeight()/2.0f-reachedHeight/2.0f;
+            reachedRectF.right = (getWidth()-getPaddingLeft()-getPaddingRight())/(maxProgress*1.0f) * (float)currentProgress;
+            reachedRectF.bottom = getHeight()/2.0f+reachedHeight/2.0f;
+            drawTextStart = reachedRectF.right;
+        }
+
+        if ((drawTextStart+drawTextWidth) >= (getWidth()-getPaddingRight())){
+            drawTextStart = getWidth() - getPaddingRight() - drawTextWidth;
+            reachedRectF.right = drawTextStart;
+        }
+
+        drawTextEnd =  (int) ((getHeight() / 2.0f) - ((textPaint.descent() + textPaint.ascent()) / 2.0f));
+        float unreachedBarStart = reachedRectF.right+drawTextWidth;
+        if (unreachedBarStart >= getWidth() - getPaddingRight()) {
+            dawUnreachedBar = false;
+        }else{
+            dawUnreachedBar = true;
+            unReachedRectF.left = unreachedBarStart;
+            unReachedRectF.right = getWidth() - getPaddingRight();
+            unReachedRectF.top = getHeight() / 2.0f + -unReachedHeight / 2.0f;
+            unReachedRectF.bottom = getHeight() / 2.0f + unReachedHeight / 2.0f;
+        }
+    }
+
+    public int getCurrentProgress() {
+        return currentProgress;
+    }
+
+    public void setCurrentProgress(int currentProgress) {
+        if (currentProgress<=maxProgress && currentProgress >=0) {
+            this.currentProgress = currentProgress;
+            invalidate();
+        }
+    }
+
+    public int getMaxProgress() {
+        return maxProgress;
+    }
+
+    public void setMaxProgress(int maxProgress) {
+        this.maxProgress = maxProgress;
+    }
+
+    /**
+     * dp2px
+     */
+    public static float dip2px(Context context, float dpValue) {
+        final float scale = context.getResources().getDisplayMetrics().density;
+        return (dpValue * scale + 0.5f);
+    }
+
+    /**
+     * sp2px
+     */
+    public static float sp2px(Context context, float spValue) {
+        final float fontScale = context.getResources().getDisplayMetrics().scaledDensity;
+        return (spValue * fontScale + 0.5f);
     }
 }
